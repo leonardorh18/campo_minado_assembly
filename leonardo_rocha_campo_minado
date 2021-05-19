@@ -1,0 +1,725 @@
+.data
+
+campo: .word 0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0
+
+interface: .word 0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0 ,0,0,0,0,0,0,0,0
+
+salva_S0:		.word		0
+salva_ra:		.word		0
+salva_ra1:		.word		0
+
+linha:		.word 		0
+coluna:		.word		0  
+opcao:		.word		0
+totalJogadas:	.word		64 #padrao precisa ser 64 pq tem 64 jogadas, pode colocar menos pra testar, mas precisa ser maior do que o numero de bombas
+totalBombas: 	.word 		0
+countJogadas:	.word		0
+jogadasSemBombas: .word		0
+
+msg_fim:	.asciz "\n\n FIM \n"
+msg_N:	.asciz "\n"
+msg_nj:	.asciz "- \t"
+msg_esp: .asciz " - \t"
+msg_esp2: .asciz " -> \t"
+
+msg_f:	.asciz " F \t"
+msg_t:	.asciz "\t"
+
+msg_entrada:	.asciz "\n Digite 2 para flag ou 1 para fazer uma jogada:   "
+msg_row:	.asciz "\n Digite a linha:  "
+msg_col:	.asciz "\n Digite a coluna: "
+msg_loss:	.asciz "\n KABUMMMMMM!! VOCE EXPLODIU!! \n "
+msg_win:	.asciz "\n VOCE GANHOU!!!!!\n "
+
+.text
+main:
+	la 	a1, campo
+	addi	a3, zero, 8
+	jal 	INSERE_BOMBA
+	
+	## AQUI EU CARREGO O TOTAL DE BOMBAS E FA«O ( TOTAL DE BOMBAS -  QUANTIDADE DE JOGADAS POSSIVEIS)
+	## NA MINHA CABE«A, SE EU CONSEGUIR FAZER QUANTIDADE DE JOGADAS IGUAL A QUANTIDADE DE JOGADAS POSSIVEIS SEM CAIR EM UMA BOMBA, EU GANHO
+	# NAO SEI SE FAZ SENTIDO, TESTEI COM totalJogadas = 20, ja que tem 15 bombas, tenho 5 jogadas, se nessas 5 jogadas eu nao cair em uma bomba eu ganho
+	#-------------------------------
+	la 	a1, totalBombas # carrega o total de bombas que esta em t3
+	sw	t3, 0(a1)
+	
+	la 	a6, totalJogadas
+	lw 	a6, 0(a6)
+	
+	sub t3, a6, t3 #subtrai totalJogadas - totalBombas
+	
+	la 	a6, jogadasSemBombas #armazena o resultado da subtraÁ„o aqui
+	sw 	t3, 0(a6)
+	##------------------------------
+	    
+	la 	a1, campo  #carrega campo	
+	la 	a6, interface #carrega interface
+	
+	jal s9, calcula_bombas
+	
+	addi s6, zero, 1
+	
+	mv a7, zero
+	
+	j jogadas
+	## --- LOOPING DO JOGO
+	
+le_jogadas:
+	jal le_opcao
+	jal le_row
+	jal le_col
+	jr s9
+			
+jogadas:
+	
+	beq s6, zero, end
+	
+	jal s9, print_interface ## PRINTA A INTERFACE
+	
+	jal s9, le_jogadas ## LE AS JOGADAS
+		
+	jal s11, realiza_jogada ## REALIZA A JOGADA
+	
+	j jogadas
+
+ganhou:
+	jal s9, print_interface
+	
+	la 	a0, msg_win  # imprime mensagem de vitoria
+	li 	a7, 4
+	ecall 
+	
+	mv s6, zero
+	
+	j end
+	
+## SE CAIU EM UMA BOMBA VEM PRA CA, MOSTRA MENSAGEM DE EXPLOSAO E ENCERRA
+caiu_bomba:
+	
+	jal s9, print_interface # printa a interface uma ultima vez antes de acabar o jogo
+	
+	la 	a0, msg_loss  # imprime mensagem de explosao
+	li 	a7, 4
+	ecall 
+	
+	mv s6, zero
+	
+	j end
+
+##CASO JA TENHA UMA FLAG NA POSI«√O JOGADA, RETIRA ELA SE O USUARIO JOGOU UMA FLAG POR CIMA
+altera_flag:
+	mv t4, zero
+	sw t4, 0(s1) # armazena 0 no endereÁo de s1 que È um campo do campo minado
+	
+	jr s11
+	
+## VERIFICA SE A POSI«√O JOGADA JA TEM UMA FLAG, CONSIDERANDO QUE O USUARIO JOGOU UMA FLAG POR CIMA, AI ALTERA TIRANDO A FLAG	
+edit_flag:
+	
+	lw t5, (s1) # carrega o valor da posicao que esta em s1 (interface)
+	li t1, 1
+	beq t5, t1, return_jogadas
+	beq t5, t4, altera_flag
+
+	jr s10
+
+#CASO TENHA FEITO UMA JOGADA EM UM CAMPO QUE TEM UMA FLAG APENAS RETORNA NAO COMPLETANDO A JOGADA		
+edit_notflag:
+
+	lw t5, (s1)  # carrega o valor da posicao que esta em s1 (interface)
+	beq t5, t2, return_jogadas
+	jr s10
+	
+	
+treat_flag:
+
+	beq t2, t4, edit_flag #se a jogada for uma flag, t4 tem o valor  da jogada
+	
+	bne t2, t4, edit_notflag #se a jogada nao for uma flag mas tiver uma flag no lugar da jogada. EX: JOGOU 1 EM UM CAMPO QUE JA TINHA 2 (FLAG)
+	
+	jr s10
+
+treat_jogada:
+	lw t5, (s1) #carrega o valor que esta na posiÁ„o jogada
+	beq t5, t4, return_jogadas # comapara se o valor jogado È igual ao que ja tem na posiÁ„o jogada
+	jr s10
+	
+realiza_jogada:
+	
+	la t0, coluna #L  COLUNA
+	la t5, linha #L  LINHAS
+	
+	lw t0, 0(t0) #PEGA OS VALORES
+	lw t5, 0(t5)
+	
+	addi t5, t5, -1 #SUBTRAI 1 PRA APLICAR NA FORMULA PARA OBTER O INDICE
+	addi t0, t0, -1
+	
+	addi t4, zero, 8 #TOTAL DE COLUNAS
+	
+	# ----- INDICE =  (LINHA * QNTD_COLUNA + COLUNA_JOGADA ) * 4
+	mul s1, t5, t4 
+	add s1, s1, t0
+	
+	addi t4, zero, 4
+	mul s1, s1, t4
+	#------------------ OBTEM A POSICAO PARA SOMAR COM O VALOR INICIAL NA MEMORIA
+	
+	add s2, a1, s1 #PEGA A POSI«√O JOGADA NO CAMPO
+	add s1, a6, s1 #PEGA A POSI«√O JOGADA NA INTERFACE
+	
+	lw s2, (s2) #VALOR DO CAMPO QUE ESTA NA POSI«√O JOGADA, USADO A SEGUIR PRA COMPARAR SE … UMA BOMBA
+	
+	la t4, opcao #LE END. OP«AO JOGADA
+	lw t4, 0(t4) #LE O VALOR DA OP«√O JOGADA
+	
+	addi t2, zero, 2 #valor correspondente a flag
+	#addi t1, zero, 1 #valor correspondente a uma jogada
+	
+	
+	jal s10, treat_flag #se a opcao que ele jogou for uma flag eu faÁo um tratamento pra ver se ja tem uma flag nessa posicao
+	jal s10, treat_jogada	
+	
+	sw t4, 0(s1) #insere o valor da jogada na matriz de interface
+	
+	beq t4, t2, return_jogadas #se a jogada for uma flag nao verifica se tem bomba
+	
+	addi t4, zero, 9 # bomba
+	beq s2, t4, caiu_bomba # CASO TENHA CAIDO EM UMA BOMBA, VAI PARA CAIU_BOMBA
+	
+	la t2, countJogadas ## CASO NAO SEJA UMA BOMBA VAI PASSAR AQUI, NESSA ETAPA EU SOMO +1 JOGADA E QUANDO A QUANTIDADE DE JOGADAS FOR IGUAL A QUANTIADE DE JOGADAS SEM BOMBAS, O JOGO ACABA E VOCE GANHA
+	lw t3, 0(t2)
+	addi t3, t3,1
+	sw t3, 0(t2)
+	
+	la t4, jogadasSemBombas #carrega o numero de jgoadas sem bombas
+	lw t4, 0(t4)
+	
+	bge t3, t4, ganhou #se a jogada de bombas for maior ou igual a quantidade de jogadas sem bombas voce ganha
+	
+	jr s11
+
+	#FUN«√O PARA RETORNAR	
+return_jogadas:
+	jr s11	
+
+	#LE A OP«√O	
+le_opcao:
+
+	la 	a0, msg_entrada  # imprime mensagem para ler a opcao
+	li 	a7, 4
+	ecall 
+
+	addi 	a7, zero, 5  #le a opcao
+	ecall
+	add 	a7, zero, a0  # carrega valor lido em a7
+	
+	la t4, opcao
+	sw  a7, 0(t4)
+	ret
+	
+	
+	#LE A LINHA
+le_row:
+
+	la 	a0, msg_row  # imprime mensagem para ler a linha
+	li 	a7, 4
+	ecall
+	
+	addi 	a7, zero, 5  #le a opcao
+	ecall
+	add 	a7, zero, a0  # carrega valor lido em a7
+	
+	
+	la t0, linha
+	sw  a7, 0(t0)
+	
+	ret
+
+	#LE A COLUNA	
+le_col:
+	la 	a0, msg_col  # imprime mensagem para ler a coluna
+	li 	a7, 4
+	ecall
+	
+	addi 	a7, zero, 5  #le a opcao
+	ecall
+	add 	a7, zero, a0  # carrega valor lido em a7
+	
+	la t5, coluna
+	sw  a7, 0(t5)
+
+	ret	
+		
+#------------------------------------------------ PRINT
+
+#IMPRIME A MENSAGEM PADRAO PARA UMA POSI«√O DA INTERFACE COM VALOR 0, QUE SIGNIFICA QUE NAO FOI "JOGADA" 
+naoJogou:
+	la 	a0, msg_nj # imprime mensagem de nao jogou "-"
+	li 	a7,4
+	ecall
+	
+	jr s10
+
+	#CASO A POSI«√O DA INTERFACE TENHA VALOR 1, ELA FOI JOGADA, ENT√O IMPRIME A MESMA POSI«√O REFERENTE NA MATRIZ DO CAMPO	
+jogou:	
+	add t5, a1, t3
+	lw a0, (t5)
+	#mv a0, s3
+	#beq a0, t6, caiu_bomba
+	
+	li 	a7, 1 # imprime mensagem da pos que jogou
+	ecall
+	
+	la 	a0, msg_t 
+	li 	a7,4
+	ecall
+		
+	jr s10
+
+# CASO A POSI«√O DA INTERFACE SEJA 2, SIGINIFCA QUE … UMA FLAG E PRINTA UM F DE ACORDO COM A MENSAGEM DEFINIDA 	
+flag:
+	la 	a0, msg_f # imprime mensagem de flag
+	li 	a7,4
+	ecall	
+	jr s10
+	
+#FUN«√O VERIFICA QUAIS PRINTS FAZER USANDO A MATRZI DA INTERFACE QUE POSSUI AS JOGADAS DO USUARIO	
+verificaPrint:	
+	addi s7, zero, 1 # se 1 jogou 
+	addi s8, zero, 2 # se 2 flag
+	
+	beq s3, zero, naoJogou
+	beq s3, s7, jogou
+	beq s3, s8, flag
+	jr s10
+
+ret_function:	
+	jr s11
+
+#SERIA UM 2∫ FOR PARA PRINTAR A MATRIZ	
+loop2:
+	bge 	s1, t1, ret_function
+	
+	add t4, a6, t3
+	lw s3, (t4)
+	
+	jal s10, verificaPrint
+	
+	addi s1, s1, 1
+	addi t3, t3, 4
+	
+	j loop2	
+	
+print_interface:
+	#iniciando as variaveis pro print
+	mv t2, zero #contador soma +1
+	addi t1, zero, 8#quantidade de campos
+	mv t3, zero #vai somar 4
+	addi s2, zero, 7 #n de colunas
+	mv s1, zero#contador pra pular linha \n
+	addi t6, zero, 9 #bomba
+	
+# PRINTA O NUMERO DAS COLUNAS 	
+print_colunas:
+	bge  t2, t1, continue_print
+	
+	la 	a0, msg_t # imprime mensagem do espaco 2, espaco maior
+	li 	a7,4
+	ecall
+	
+	addi 	a0, t2 ,1  # imprime inteiro
+	li 	a7, 1
+	ecall
+	
+	addi t2, t2, 1
+	
+	j print_colunas
+
+#CONTINUA O PRINT SEGUINDO PARA PRINTAR A MATRIZ DA INTERFACE, FAZ UM \N PARA PULAR LINHA
+continue_print:
+	mv t2, zero
+	
+	la 	a0, msg_N  # imprime mensagem de \n
+	li 	a7,4
+	ecall
+	
+# 1∫ FOR PARA PRINTAR A MATRIZ DA INTERFACE	
+loop_print:
+	bge  t2, t1, end_print #termina
+	
+	mv s1, zero #ZERA O S1 USADO NO 2 FOR
+		
+	addi 	a0, t2 ,1  # imprime inteiro da linha
+	li 	a7, 1
+	ecall
+	
+	la 	a0, msg_esp2  # imprime mensagem de espaÁo
+	li 	a7,4
+	ecall
+	
+	jal s11, loop2 #VAI PARA O 2∫ FOR
+	
+	la 	a0, msg_N  # imprime mensagem de \n
+	li 	a7,4
+	ecall
+	
+	addi t2,t2,1 
+
+	j loop_print
+	
+end_print:
+
+
+	jr s9
+
+	
+# ----------------------------------------------- PREENCHE MAT	
+#
+#link para entender a lÛgica: https://docs.google.com/spreadsheets/d/15bhZRC0y_oyUvl74oFT1HVMNZRxPDMe_diQaLqFUcHM/edit?usp=sharing
+#
+#-----------------------------------------------			
+calcula_bombas:
+
+	addi t0, zero,9 #t0 vai ser a bomba pra comparar 
+
+	jal s11, preenche_diag ## guarda o ra em s11 pra voltar depois pq ele se perde no caminho
+	
+	jal s11, preenche_lat #preenche lateal 
+	
+	jal s11, preenche_meio #PREENCHE O MEIO DA MATRIZ RESTANTE, COMO SE FOSSE UMA MATRIZ 6X6, DEPOIS DE PREENCHER AS PONTAS E AS LATERAIS
+	
+	jr s9
+	
+end_loopmeio:
+	 jr s11	
+	 
+end_segloopmeio:
+	 jr s10
+	 
+preenche_meio:
+
+	mv t2, zero#primeiro contador ate 6
+	mv t4, zero 
+	mv s3, zero # segundo contador ate 6
+	addi t6,zero, 6 #como eu ja preenchi as laterais e as pontas vao sobrar uma matriz 6x6 usado pra comparar os contadores
+	addi t3, a1, 36 #endereÁo inicial
+	
+loop_meio:
+	beq t2, t6, end_loopmeio
+	
+	jal s10, segundoLoop_meio
+	
+	addi t2,t2,1 
+	addi t3,t3, 8
+	
+	mv s3, zero
+	
+	j loop_meio
+	
+segundoLoop_meio:
+	beq s3, t6, end_segloopmeio
+	
+	addi t4, t3, +4
+	jal comparaNove
+	addi t4, t3, -4
+	jal comparaNove
+	addi t4, t3, -36
+	jal comparaNove
+	addi t4, t3, +36
+	jal comparaNove
+	addi t4, t3, -32
+	jal comparaNove
+	addi t4, t3, +32
+	jal comparaNove
+	addi t4, t3, +28
+	jal comparaNove
+	addi t4, t3, -28
+	jal comparaNove
+	
+	addi s3,s3,1
+	addi t3,t3,4
+	j segundoLoop_meio
+		
+				
+	
+preenche_lat:
+	
+	mv t2, zero
+	mv t4, zero #endereÁo auxiliar pra comparar os vizinhos
+	addi t6,zero, 6 #numero de linhas da lateral, excluindo as diagonais que ja foram preenchidas, sobra 6
+	addi t3, a1, 60 #endereco inicial da lateral direita tirando a ponta
+	
+	jal s10, loop_latdir #preenche lateral direita
+
+	mv t2, zero
+	mv t4, zero
+	addi t6,zero, 6  #numero de linhas da lateral, excluindo as diagonais que ja foram preenchidas, sobra 6
+	addi t3, a1, 32 #endereco inicial da lateral esquerda, tirando a ponta
+		
+	jal s10, loop_latesq
+	
+	mv t2, zero
+	mv t4, zero
+	addi t6,zero, 6  #numero de linhas da lateral, excluindo as diagonais que ja foram preenchidas, sobra 6
+	addi t3, a1, 4 #endereco inicial da lateral superior
+		
+	jal s10, loop_sup
+	
+	mv t2, zero
+	mv t4, zero
+	addi t6,zero, 6  #numero de linhas da lateral, excluindo as diagonais que ja foram preenchidas, sobra 6
+	addi t3, a1, 228 #endereco inicial da lateral inferior
+		
+	jal s10, loop_inf
+	
+	jr s11
+	
+	
+	
+end_looplat: #encerra o loop lateral
+	jr s10
+	
+loop_sup:
+	beq t2,t6, end_looplat	
+	
+	addi t4, t3, -4
+	jal comparaNove
+	addi t4, t3, +28
+	jal comparaNove
+	addi t4, t3, +4
+	jal comparaNove
+	addi t4, t3, +32
+	jal comparaNove
+	addi t4, t3, +36
+	jal comparaNove
+			
+	addi t2,t2,1
+	addi t3, t3, 4
+	
+	j loop_sup
+	
+loop_inf:
+	beq t2,t6, end_looplat	
+	
+	addi t4, t3, -4
+	jal comparaNove
+	addi t4, t3, -28
+	jal comparaNove
+	addi t4, t3, +4
+	jal comparaNove
+	addi t4, t3, -32
+	jal comparaNove
+	addi t4, t3, -36
+	jal comparaNove
+			
+	addi t2,t2,1
+	addi t3, t3, 4
+	
+	j loop_inf
+	
+	
+loop_latesq:
+	beq t2,t6, end_looplat	
+	
+	addi t4, t3, -32
+	jal comparaNove
+	addi t4, t3, -28
+	jal comparaNove
+	addi t4, t3, +4
+	jal comparaNove
+	addi t4, t3, +32
+	jal comparaNove
+	addi t4, t3, +36
+	jal comparaNove
+			
+	addi t2,t2,1
+	addi t3, t3, 32	
+	
+	j loop_latesq
+	
+loop_latdir:
+	beq t2,t6, end_looplat	
+	
+	addi t4, t3, -32
+	jal comparaNove
+	addi t4, t3, -36
+	jal comparaNove
+	addi t4, t3, -4
+	jal comparaNove
+	addi t4, t3, +28
+	jal comparaNove
+	addi t4, t3, +32
+	jal comparaNove
+			
+	addi t2,t2,1
+	addi t3, t3, 32	
+	
+	j loop_latdir
+
+	
+		
+				
+end_function:
+	ret
+
+addum:	#pega o valor que esta no endereÁo atual e add +1
+	lw s2, %lo(campo)(t3) 
+	addi s2,s2,1
+	sw s2, (t3)
+	ret
+	
+comparaNove: #COMPARA SE O VALOR VIZINHO DA CELULA ATUAL … 9, UMA BOMBA, ENTAO SOMA +1 NESSA CELULA INDICANDO A QUANTIDADE DE VIZINHOS COM BOMBA
+	lw s2, (t3) 
+	beq s2, t0, end_function #SE A CELULA ATUAL FOR UMA BOMBA, ENT√O NAO SOMA NADA, PQ ELA JA … UMA BOMBA, S” TERMINA
+	lw s1, %lo(campo)(t4) #CARREGA O VALOR DO VIZINHO E COMPARA SE … UMA BOMBA, SE FOR ADICIONA +1 NA CELULA ATUAL, LEMBRANDO QUE t0 = 9 (VALOR DA BOMBA)
+	beq s1, t0, addum
+	ret
+		
+preenche_diag:#funÁ„o para preencher as diagonais da matriz
+	mv t1, zero #vai ser a soma pro endereÁo de cada diagonal
+	#diagonal superior esquerda
+	add t3, a1, t1 
+	addi t4, t3, 4	#endereÁo vizinho a ser comparado
+	jal comparaNove
+	addi t4, t3, 36
+	jal comparaNove
+	addi t4, t3, 32
+	jal comparaNove
+	
+	#diagonal superior direita
+	addi t1, t1, 28 # 0 + 28 + end inicial da o end da diagonal sup dir
+	add t3, a1, t1 
+	addi t4, t3, -4	
+	jal comparaNove
+	addi t4, t3, +28
+	jal comparaNove
+	addi t4, t3, +32
+	jal comparaNove
+	
+	#diagonal inf esq
+	addi t1, t1,196 # 196 + 28 + end inicial da o end da diagonal inf esq
+	add t3, a1, t1 
+	addi t4, t3, +4	
+	jal comparaNove
+	addi t4, t3, -28
+	jal comparaNove
+	addi t4, t3, -32
+	jal comparaNove
+	
+	#diagonal inf dir
+	addi t1, t1,28 # 224 + 28 + end inicial da o end da diagonal inf dir
+	add t3, a1, t1 
+	addi t4, t3, -4	
+	jal comparaNove
+	addi t4, t3, -36
+	jal comparaNove
+	addi t4, t3, -32
+	jal comparaNove
+
+	jr s11
+		
+# ----------------------------- INSERE BOMBA
+INSERE_BOMBA:
+		la	t0, salva_S0
+		sw  	s0, 0 (t0)		# salva conteudo de s0 na memoria
+		la	t0, salva_ra
+		sw  	ra, 0 (t0)		# salva conteudo de ra na memoria
+		
+		add 	t0, zero, a1		# salva a1 em t0 - endere√ßo da matriz campo
+		add 	t1, zero, a3		# salva a3 em t1 - quantidade de linhas 
+
+QTD_BOMBAS:
+		addi 	t2, zero, 15 		# seta para 15 bombas	
+		add 	t3, zero, zero 	# inicia contador de bombas com 0
+		addi 	a7, zero, 30 		# ecall 30 pega o tempo do sistema em milisegundos (usado como semente
+		ecall 				
+		add 	a3, zero, a1		# coloca a semente em a3
+INICIO_LACO:
+		beq 	t2, t3, FIM_LACO
+		add 	a1, zero, t1 		# carrega limite para %	(resto da divis√£o)
+		jal 	PSEUDO_RAND
+		add 	t4, zero, a1		# pega linha sorteada e coloca em t4
+		add 	a1, zero, t1 		# carrega limite para % (resto da divis√£o)
+   		jal 	PSEUDO_RAND
+		add 	t5, zero, a1		# pega coluna sorteada e coloca em t5
+
+###############################################################################
+# imprime valores na tela (para debug somente) - retirar comentarios para ver
+#	
+#		li	a7, 4		# mostra texto "Posicao: "
+#		la	a1, posicao
+#		ecall
+#		li	a7, 1
+#		add 	a1, zero, t4 	# imprime a linha sorteada	
+#		ecall
+#
+#		add 	a1, zero, t5 	# imprime coluna sorteada
+#		ecall
+#		
+#		li	a7, 4		# imrpime espa√ßo
+#		la	a1, espaco
+#		ecall
+#		li	a7, 1		
+#		add 	a1, zero, t3 	# imprime quantidade ja sorteada
+#		ecall
+#		
+##########################################################################	
+
+LE_POSICAO:	
+		mul  	t4, t4, t1
+		add  	t4, t4, t5  		# calcula (L * tam) + C
+		add  	t4, t4, t4  		# multiplica por 2
+		add  	t4, t4, t4  		# multiplica por 4
+		add  	t4, t4, t0  		# calcula Base + deslocamento
+		lw   	t5, 0(t4)   		# Le posicao de memoria LxC
+VERIFICA_BOMBA:		
+		addi 	t6, zero, 9		# se posi√ß√£o sorteada j√° possui bomba
+		beq  	t5, t6, PULA_ATRIB	# pula atribui√ß√£o 
+		sw   	t6, 0(t4)		# sen√£o coloca 9 (bomba) na posi√ß√£o
+		addi 	t3, t3, 1		# incrementa quantidade de bombas sorteadas
+PULA_ATRIB:
+		j	INICIO_LACO
+
+FIM_LACO:					# recupera registradores salvos
+		la	t0, salva_S0
+		lw  	s0, 0(t0)		# recupera conteudo de s0 da mem√≥ria
+		la	t0, salva_ra
+		lw  	ra, 0(t0)		# recupera conteudo de ra da mem√≥ria		
+		jr 	ra			# retorna para funcao que fez a chamada
+		
+##################################################################
+# PSEUDO_RAND
+# fun√ß√£o que gera um n√∫mero pseudo-randomico que ser√°
+# usado para obter a posi√ß√£o da linha e coluna na matriz
+# entrada: a1 valor m√°ximo do resultado menos 1 
+#             (exemplo: a1 = 8 resultado entre 0 e 7)
+#          a3 para o n√∫mero pseudo randomico 
+# saida: a1 valor pseudo randomico gerado
+#################################################################
+#int rand1(int lim, int semente) {
+#  static long a = semente; 
+#  a = (a * 125) % 2796203; 
+#  return (|a % lim|); 
+# }  
+
+PSEUDO_RAND:
+		addi t6, zero, 125  		# carrega constante t6 = 125
+		lui  t5, 682			# carrega constante t5 = 2796203
+		addi t5, t5, 1697 		# 
+		addi t5, t5, 1034 		# 	
+		mul  a3, a3, t6			# a = a * 125
+		rem  a3, a3, t5			# a = a % 2796203
+		rem  a1, a3, a1			# a % lim
+		bge  a1, zero, EH_POSITIVO  	# testa se valor eh positivo
+		addi t4, zero, -1           	# caso n√£o 
+		mul  a1, a1, t4		    	# transforma em positivo
+EH_POSITIVO:	
+		ret				# retorna em a1 o valor obtido
+############################################################################
+
+fim:    ret
+		
+end: 
+	nop
